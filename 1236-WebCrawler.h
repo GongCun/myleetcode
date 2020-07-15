@@ -20,24 +20,28 @@ string getHostname(string &url) {
 class Solution {
 public:
     vector<string> crawl(string startUrl, HtmlParser htmlParser) {
-        set<string> visited;
+        vector<string> res;
+        map<string, bool> visited;
         string key = getHostname(startUrl);
-        doit(key, visited, startUrl, htmlParser);
-        return vector<string>(visited.begin(), visited.end());
+        doit(key, res, visited, startUrl, htmlParser);
+        return res;
     }
 
-    void doit(string &key, set<string> &visited,
-                      string startUrl, HtmlParser htmlParser) {
+    void doit(string &key, vector<string> &res, map<string, bool> &visited,
+              string startUrl, HtmlParser htmlParser) {
         if (getHostname(startUrl) != key ||
-            visited.find(startUrl) != visited.end()) {
+            visited.count(startUrl) > 0) {
             return;
         }
 
-        visited.insert(startUrl);
-        vector<string> paths = htmlParser.getUrls(startUrl);
+        res.push_back(startUrl);
+        visited[startUrl] = true;
+        vector<string> abs = htmlParser.getUrls(startUrl);
 
-        for (string s: paths) {
-            doit(key, visited, s, htmlParser);
+        if (!abs.empty()) {
+            for (string s: abs) {
+                doit(key, res, visited, s, htmlParser);
+            }
         }
     }
 };
