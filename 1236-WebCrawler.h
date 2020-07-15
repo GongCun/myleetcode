@@ -7,42 +7,43 @@
  * };
  */
 
-string getHostname(string &url) {
-    int len = url.length();
-    int i;
-    for (i = 7; i < len; i++) {
-        if (url[i] == '/')
-            break;
-    }
-    return url.substr(7, i-7);
-}
 
 class Solution {
-public:
-    vector<string> crawl(string startUrl, HtmlParser htmlParser) {
-        vector<string> res;
-        map<string, bool> visited;
-        string key = getHostname(startUrl);
-        doit(key, res, visited, startUrl, htmlParser);
-        return res;
+
+    string getHostname(string &url) {
+        int len = url.length();
+        int i;
+        for (i = 7; i < len; i++) {
+            if (url[i] == '/')
+                break;
+        }
+        return url.substr(7, i-7);
     }
 
-    void doit(string &key, vector<string> &res, map<string, bool> &visited,
-              string startUrl, HtmlParser htmlParser) {
-        if (getHostname(startUrl) != key ||
-            visited.count(startUrl) > 0) {
-            return;
-        }
+public:
 
-        res.push_back(startUrl);
-        visited[startUrl] = true;
-        vector<string> abs = htmlParser.getUrls(startUrl);
+    vector<string> crawl(string startUrl, HtmlParser htmlParser) {
+        set<string> visited;
+        stack<string> urls;
+        urls.push(startUrl);
+        string key = getHostname(startUrl);
+        while(!urls.empty()) {
+            string tmp = urls.top();
+            urls.pop();
+            
+            if (getHostname(tmp) != key ||
+                visited.find(tmp) != visited.end()) {
+                continue;
+            }
 
-        if (!abs.empty()) {
-            for (string s: abs) {
-                doit(key, res, visited, s, htmlParser);
+            visited.insert(tmp);
+            vector<string> adj = htmlParser.getUrls(tmp);
+            for (string s: adj) {
+                urls.push(s);
             }
         }
+
+        return vector<string>(visited.begin(), visited.end());
     }
 };
 
