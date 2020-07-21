@@ -20,46 +20,66 @@ string getHostname(string &url) {
 class Solution {
   private:
     set<string> visited;
-    mutex m;
+    mutex mtx;
     string key;
+    condition_variable cv_in, cv_out;
+    queue<string> bfs_in;
+    queue<string> bfs_out;
 
   public:
-    void threadFunc(string startUrl, HtmlParser htmlParser) {
+    void threadFunc(HtmlParser htmlParser) {
 
-        doit(startUrl, htmlParser);
+        while (true) {
+            unique_lock<mutex> l(mtx);
 
-    }
+            while(bfs_in.empty()) {
+                cv_in.wait(l);
+            }
+            string url = bfs_in.front();
+            bfs_in.pop();
+            l.unlock();
 
-    bool haveVisited(string& startUrl) {
-        lock_guard<mutex> l(m);
-        return visited.find(startUrl) != visited.end();
+            vector<string> adj = htmlParser.getUrls(url);
+            for (string s: adj) {
+                unique_lock<mutex> l(mtx);
+                bfs_out.push(s);
+                cv_out.notify_one();
+            }
+        }
     }
 
     vector<string> crawl(string startUrl, HtmlParser htmlParser) {
         key = getHostname(startUrl);
-        doit(startUrl, htmlParser);
+        bfs_out.push(startUrl);
+
+        for (int i = 0; i < 3; i++) {
+            thread t(&Solution::threadFunc, this, htmlParser);
+            t.detach();
+        }
+
+        while (true) {
+            unique_lock<mutex> l(mtx);
+            if (bfs_in.empty() && bfs_out.empty()) {
+                break;
+            }
+            while (bfs_out.empty()) {
+                cv_out.wait(l);
+            }
+            string url = bfs_out.front();
+            bfs_out.pop();
+
+            if (getHostname(url) != key ||
+                visited.find(url) != visited.end()) {
+                cv_in.notify_one();
+                continue;
+            }
+
+            visited.insert(url);
+            bfs_in.push(url);
+            cv_in.notify_one();
+        }
+
         return vector<string>(visited.begin(), visited.end());
-    }
-
-    void doit(string startUrl, HtmlParser htmlParser) {
-        if (getHostname(startUrl) != key || haveVisited(startUrl)) {
-            return;
-        }
-
-        {
-            lock_guard<mutex> l(m);
-            visited.insert(startUrl);
-        }
-        
-        vector<string> adj = htmlParser.getUrls(startUrl);
-        vector<thread> threads;
-
-        for (auto& s: adj) {
-            threads.emplace_back(&Solution::threadFunc, this, s, htmlParser);
-        }
-
-        for (auto& entry: threads)
-            entry.join();
     }
 };
 
