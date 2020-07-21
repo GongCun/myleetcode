@@ -37,14 +37,13 @@ class Solution {
             }
             string url = bfs_in.front();
             bfs_in.pop();
-            l.unlock();
 
             vector<string> adj = htmlParser.getUrls(url);
             for (string s: adj) {
-                unique_lock<mutex> l(mtx);
                 bfs_out.push(s);
-                cv_out.notify_one();
             }
+            l.unlock();
+            cv_out.notify_one();
         }
     }
 
@@ -52,16 +51,14 @@ class Solution {
         key = getHostname(startUrl);
         bfs_out.push(startUrl);
 
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < 1; i++) {
             thread t(&Solution::threadFunc, this, htmlParser);
             t.detach();
         }
 
         while (true) {
             unique_lock<mutex> l(mtx);
-            if (bfs_in.empty() && bfs_out.empty()) {
-                break;
-            }
+
             while (bfs_out.empty()) {
                 cv_out.wait(l);
             }
@@ -70,12 +67,14 @@ class Solution {
 
             if (getHostname(url) != key ||
                 visited.find(url) != visited.end()) {
-                cv_in.notify_one();
+                if (bfs_out.empty())
+                    break;
                 continue;
             }
 
             visited.insert(url);
             bfs_in.push(url);
+            l.unlock();
             cv_in.notify_one();
         }
 
