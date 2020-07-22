@@ -22,28 +22,36 @@ class Solution {
     set<string> visited;
     mutex mtx;
     string key;
-    /* condition_variable cv_in, cv_out; */
-    mutable int task;
+    condition_variable cv_in, cv_out;
     queue<string> bfs_in;
     queue<string> bfs_out;
+    mutable int task_in, task_out;
 
   public:
     void threadFunc(HtmlParser htmlParser) {
+
         while (true) {
             unique_lock<mutex> l(mtx);
-            string url;
-            if (!bfs_in.empty()) {
-                url = bfs_in.front();
-                bfs_in.pop();
-                --task;
+
+            while(bfs_in.empty()) {
+                cv_in.wait(l);
+                cv_out.notify_one();
             }
+            string url = bfs_in.front();
+            bfs_in.pop();
+            --task_in;
             l.unlock();
 
-            if (!url.empty()) {
-                vector<string> adj = htmlParser.getUrls(url);
+            vector<string> adj = htmlParser.getUrls(url);
+            if (adj.empty()) {
+                cv_out.notify_one();
+            } else {
                 for (string s: adj) {
                     unique_lock<mutex> l(mtx);
                     bfs_out.push(s);
+                    ++task_out;
+                    l.unlock();
+                    cv_out.notify_one();
                 }
             }
         }
@@ -52,7 +60,8 @@ class Solution {
     vector<string> crawl(string startUrl, HtmlParser htmlParser) {
         key = getHostname(startUrl);
         bfs_out.push(startUrl);
-        task = 0;
+        task_in = 0;
+        task_out = 1;
 
         for (int i = 0; i < 10; i++) {
             thread t(&Solution::threadFunc, this, htmlParser);
@@ -61,24 +70,32 @@ class Solution {
 
         while (true) {
             unique_lock<mutex> l(mtx);
-            if (task == 0 && bfs_out.empty())
-                break;
 
-            if (!bfs_out.empty()) {
-                string url = bfs_out.front();
-                bfs_out.pop();
+            while (bfs_out.empty()) {
+                cv_out.wait(l);
+                if (task_in == 0 && task_out == 0) goto end;
 
-                if (getHostname(url) != key ||
-                    visited.find(url) != visited.end()) {
-                    continue;
-                }
-
-                visited.insert(url);
-                bfs_in.push(url);
-                task++;
             }
-        }
 
+            string url = bfs_out.front();
+            bfs_out.pop();
+            --task_out;
+
+            if (getHostname(url) != key ||
+                visited.find(url) != visited.end()) {
+                //cv_in.notify_one();
+                if (task_out == 0 && task_in == 0)
+                    break;
+                continue;
+            }
+
+            
+            visited.insert(url);
+            bfs_in.push(url);
+            ++task_in;
+            cv_in.notify_one();
+        }
+      end:
         return vector<string>(visited.begin(), visited.end());
     }
 };
