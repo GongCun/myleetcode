@@ -37,13 +37,19 @@ class Solution {
             }
             string url = bfs_in.front();
             bfs_in.pop();
+            l.unlock();
 
             vector<string> adj = htmlParser.getUrls(url);
-            for (string s: adj) {
-                bfs_out.push(s);
+            if (adj.empty()) {
+                cv_out.notify_one();
+            } else {
+                for (string s: adj) {
+                    unique_lock<mutex> l(mtx);
+                    bfs_out.push(s);
+                    l.unlock();
+                    cv_out.notify_one();
+                }
             }
-            l.unlock();
-            cv_out.notify_one();
         }
     }
 
@@ -51,7 +57,7 @@ class Solution {
         key = getHostname(startUrl);
         bfs_out.push(startUrl);
 
-        for (int i = 0; i < 1; i++) {
+        for (int i = 0; i < 10; i++) {
             thread t(&Solution::threadFunc, this, htmlParser);
             t.detach();
         }
@@ -61,23 +67,25 @@ class Solution {
 
             while (bfs_out.empty()) {
                 cv_out.wait(l);
+                if (bfs_in.empty() && bfs_out.empty())
+                    goto end;
+
             }
             string url = bfs_out.front();
             bfs_out.pop();
 
             if (getHostname(url) != key ||
                 visited.find(url) != visited.end()) {
-                if (bfs_out.empty())
-                    break;
+                cv_in.notify_one();
                 continue;
             }
 
+            
             visited.insert(url);
             bfs_in.push(url);
-            l.unlock();
             cv_in.notify_one();
         }
-
+      end:
         return vector<string>(visited.begin(), visited.end());
     }
 };
