@@ -20,7 +20,7 @@ string getHostname(string &url) {
 class Solution {
   private:
     set<string> visited;
-    mutex mtx;
+    mutex mtx1, mtx2;
     string key;
     condition_variable cv_in, cv_out;
     queue<string> bfs_in;
@@ -30,7 +30,7 @@ class Solution {
     void threadFunc(HtmlParser htmlParser) {
 
         while (true) {
-            unique_lock<mutex> l(mtx);
+            unique_lock<mutex> l(mtx1);
 
             while(bfs_in.empty()) {
                 cv_in.wait(l);
@@ -44,9 +44,8 @@ class Solution {
                 cv_out.notify_one();
             } else {
                 for (string s: adj) {
-                    unique_lock<mutex> l(mtx);
+                    unique_lock<mutex> l(mtx2);
                     bfs_out.push(s);
-                    l.unlock();
                     cv_out.notify_one();
                 }
             }
@@ -63,7 +62,7 @@ class Solution {
         }
 
         while (true) {
-            unique_lock<mutex> l(mtx);
+            unique_lock<mutex> l(mtx2);
 
             while (bfs_out.empty()) {
                 cv_out.wait(l);
@@ -73,17 +72,20 @@ class Solution {
             }
             string url = bfs_out.front();
             bfs_out.pop();
+            l.unlock();
 
             if (getHostname(url) != key ||
                 visited.find(url) != visited.end()) {
                 cv_in.notify_one();
                 continue;
             }
-
-            
             visited.insert(url);
-            bfs_in.push(url);
-            cv_in.notify_one();
+
+            {
+                unique_lock<mutex> l(mtx1);
+                bfs_in.push(url);
+                cv_in.notify_one();
+            }
         }
       end:
         return vector<string>(visited.begin(), visited.end());
