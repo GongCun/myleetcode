@@ -20,33 +20,30 @@ string getHostname(string &url) {
 class Solution {
   private:
     set<string> visited;
-    mutex mtx1, mtx2;
+    mutex mtx;
     string key;
-    condition_variable cv_in, cv_out;
+    /* condition_variable cv_in, cv_out; */
+    mutable int task;
     queue<string> bfs_in;
     queue<string> bfs_out;
 
   public:
     void threadFunc(HtmlParser htmlParser) {
-
         while (true) {
-            unique_lock<mutex> l(mtx1);
-
-            while(bfs_in.empty()) {
-                cv_in.wait(l);
+            unique_lock<mutex> l(mtx);
+            string url;
+            if (!bfs_in.empty()) {
+                url = bfs_in.front();
+                bfs_in.pop();
+                --task;
             }
-            string url = bfs_in.front();
-            bfs_in.pop();
             l.unlock();
 
-            vector<string> adj = htmlParser.getUrls(url);
-            if (adj.empty()) {
-                cv_out.notify_one();
-            } else {
+            if (!url.empty()) {
+                vector<string> adj = htmlParser.getUrls(url);
                 for (string s: adj) {
-                    unique_lock<mutex> l(mtx2);
+                    unique_lock<mutex> l(mtx);
                     bfs_out.push(s);
-                    cv_out.notify_one();
                 }
             }
         }
@@ -55,6 +52,7 @@ class Solution {
     vector<string> crawl(string startUrl, HtmlParser htmlParser) {
         key = getHostname(startUrl);
         bfs_out.push(startUrl);
+        task = 0;
 
         for (int i = 0; i < 10; i++) {
             thread t(&Solution::threadFunc, this, htmlParser);
@@ -62,32 +60,25 @@ class Solution {
         }
 
         while (true) {
-            unique_lock<mutex> l(mtx2);
+            unique_lock<mutex> l(mtx);
+            if (task == 0 && bfs_out.empty())
+                break;
 
-            while (bfs_out.empty()) {
-                cv_out.wait(l);
-                if (bfs_in.empty() && bfs_out.empty())
-                    goto end;
+            if (!bfs_out.empty()) {
+                string url = bfs_out.front();
+                bfs_out.pop();
 
-            }
-            string url = bfs_out.front();
-            bfs_out.pop();
-            l.unlock();
+                if (getHostname(url) != key ||
+                    visited.find(url) != visited.end()) {
+                    continue;
+                }
 
-            if (getHostname(url) != key ||
-                visited.find(url) != visited.end()) {
-                cv_in.notify_one();
-                continue;
-            }
-            visited.insert(url);
-
-            {
-                unique_lock<mutex> l(mtx1);
+                visited.insert(url);
                 bfs_in.push(url);
-                cv_in.notify_one();
+                task++;
             }
         }
-      end:
+
         return vector<string>(visited.begin(), visited.end());
     }
 };
