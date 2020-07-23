@@ -25,7 +25,6 @@ class Solution {
     condition_variable cv_in, cv_out;
     queue<string> bfs_in;
     queue<string> bfs_out;
-    mutable int task_in, task_out;
 
   public:
     void threadFunc(HtmlParser htmlParser) {
@@ -35,24 +34,17 @@ class Solution {
 
             while(bfs_in.empty()) {
                 cv_in.wait(l);
-                cv_out.notify_one();
             }
             string url = bfs_in.front();
             bfs_in.pop();
-            --task_in;
             l.unlock();
 
             vector<string> adj = htmlParser.getUrls(url);
-            if (adj.empty()) {
+            for (string s: adj) {
+                unique_lock<mutex> l(mtx);
+                bfs_out.push(s);
+                l.unlock();
                 cv_out.notify_one();
-            } else {
-                for (string s: adj) {
-                    unique_lock<mutex> l(mtx);
-                    bfs_out.push(s);
-                    ++task_out;
-                    l.unlock();
-                    cv_out.notify_one();
-                }
             }
         }
     }
@@ -60,8 +52,6 @@ class Solution {
     vector<string> crawl(string startUrl, HtmlParser htmlParser) {
         key = getHostname(startUrl);
         bfs_out.push(startUrl);
-        task_in = 0;
-        task_out = 1;
 
         for (int i = 0; i < 10; i++) {
             thread t(&Solution::threadFunc, this, htmlParser);
@@ -72,27 +62,23 @@ class Solution {
             unique_lock<mutex> l(mtx);
 
             while (bfs_out.empty()) {
-                cv_out.wait(l);
-                if (task_in == 0 && task_out == 0) goto end;
-
+                if (cv_out.wait_for(l, 30ms) == cv_status::timeout)
+                    goto end;
             }
 
             string url = bfs_out.front();
             bfs_out.pop();
-            --task_out;
 
             if (getHostname(url) != key ||
                 visited.find(url) != visited.end()) {
-                //cv_in.notify_one();
-                if (task_out == 0 && task_in == 0)
-                    break;
+                cv_in.notify_one();
                 continue;
             }
 
+            cout << url << endl;
             
             visited.insert(url);
             bfs_in.push(url);
-            ++task_in;
             cv_in.notify_one();
         }
       end:
