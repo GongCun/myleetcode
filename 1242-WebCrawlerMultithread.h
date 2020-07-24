@@ -20,80 +20,47 @@ string getHostname(string &url) {
 class Solution {
   private:
     set<string> visited;
-    mutex mtx;
+    mutex m;
     string key;
-    condition_variable cv_in, cv_out;
-    mutable int ready = 0;
-    mutable bool finish = false;
-    queue<string> bfs_in, bfs_out;
 
   public:
-    void threadFunc(HtmlParser& htmlParser) {
+    void threadFunc(string& startUrl, HtmlParser& htmlParser) {
 
-        while (true) {
-            unique_lock<mutex> l(mtx);
+        doit(startUrl, htmlParser);
 
-            while(bfs_in.empty() && !finish) {
-                cv_in.wait(l);
-            }
-
-            if (finish) return;
-
-            string url = bfs_in.front();
-            bfs_in.pop();
-            l.unlock();
-
-            vector<string> adj = htmlParser.getUrls(url);
-            for (string s: adj) {
-                l.lock();
-                bfs_out.push(s);
-                l.unlock();
-            }
-
-            l.lock();
-            --ready;
-            cv_out.notify_one();
-        }
     }
+
+    /* bool haveVisited(string& startUrl) { */
+    /*     lock_guard<mutex> l(m); */
+    /*     return visited.find(startUrl) != visited.end(); */
+    /* } */
 
     vector<string> crawl(string startUrl, HtmlParser htmlParser) {
         key = getHostname(startUrl);
-        bfs_out.push(startUrl);
-        ready = 0;
-
-        for (int i = 0; i < 2; i++) {
-            thread t(&Solution::threadFunc, this,ref(htmlParser));
-            t.detach();
-        }
-
-        while (true) {
-            unique_lock<mutex> l(mtx);
-
-            while (bfs_out.empty() && ready) {
-                cv_out.wait(l);
-            }
-
-            while (!bfs_out.empty()) {
-                string url = bfs_out.front();
-                bfs_out.pop();
-
-                if (getHostname(url) != key ||
-                    visited.find(url) != visited.end()) {
-                    continue;
-                }
-
-                visited.insert(url);
-                bfs_in.push(url);
-                ++ready;
-            }
-            cv_in.notify_all();
-            if (!ready) {
-                finish = true;
-                break;
-            }
-        }
-
+        doit(startUrl, htmlParser);
         return vector<string>(visited.begin(), visited.end());
+    }
+
+    void doit(string& startUrl, HtmlParser& htmlParser) {
+        unique_lock<mutex> l(m);
+        
+        if (getHostname(startUrl) != key ||
+            visited.find(startUrl) != visited.end()) {
+            return;
+        }
+
+        visited.insert(startUrl);
+        l.unlock();
+        
+        vector<string> adj = htmlParser.getUrls(startUrl);
+        vector<thread> threads;
+
+        for (auto s: adj) {
+            threads.emplace_back(&Solution::threadFunc, this, ref(s), ref(htmlParser));
+        }
+
+        for (auto& entry: threads)
+            entry.join();
     }
 };
 
