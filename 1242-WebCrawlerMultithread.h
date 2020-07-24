@@ -19,82 +19,70 @@ string getHostname(string &url) {
 
 class Solution {
   private:
-    set<string> visited;
     mutex mtx;
     string key;
     condition_variable cv_in, cv_out;
-    queue<string> bfs_in;
-    queue<string> bfs_out;
-    mutable int ready = 0;
-    mutable bool finish = false;
 
   public:
-    void threadFunc(HtmlParser& htmlParser) {
+    void threadFunc(HtmlParser& htmlParser, queue<string>& bfs_in, queue<string>& bfs_out) {
 
         while (true) {
             unique_lock<mutex> l(mtx);
 
-            while(bfs_in.empty() && !finish) {
+            while(bfs_in.empty()) {
                 cv_in.wait(l);
             }
-
-            if (finish)
-                return;
-
             string url = bfs_in.front();
             bfs_in.pop();
             l.unlock();
 
             vector<string> adj = htmlParser.getUrls(url);
             for (string s: adj) {
-                l.lock();
+                unique_lock<mutex> l(mtx);
                 bfs_out.push(s);
                 l.unlock();
+                cv_out.notify_one();
             }
-
-            l.lock();
-            --ready;
-            cv_out.notify_one();
         }
     }
 
     vector<string> crawl(string startUrl, HtmlParser htmlParser) {
         key = getHostname(startUrl);
         bfs_out.push(startUrl);
-        ready = 0;
+        set<string> visited;
+        queue<string> bfs_in;
+        queue<string> bfs_out;
 
         for (int i = 0; i < 10; i++) {
-            thread t(&Solution::threadFunc, this,ref(htmlParser));
+            thread t(&Solution::threadFunc, this, ref(htmlParser), ref(bfs_int), ref(bfs_out));
             t.detach();
         }
 
         while (true) {
             unique_lock<mutex> l(mtx);
 
-            while (bfs_out.empty() && ready) {
-                cv_out.wait(l);
+            while (bfs_out.empty()) {
+                if (cv_out.wait_for(l, chrono::milliseconds(20)) == cv_status::timeout)
+                    goto end;
             }
 
-            while (!bfs_out.empty()) {
-                string url = bfs_out.front();
-                bfs_out.pop();
+            string url = bfs_out.front();
+            bfs_out.pop();
 
-                if (getHostname(url) != key ||
-                    visited.find(url) != visited.end()) {
-                    continue;
-                }
-
-                visited.insert(url);
-                bfs_in.push(url);
-                ++ready;
+            if (getHostname(url) != key ||
+                visited.find(url) != visited.end()) {
+                cv_in.notify_one();
+                continue;
             }
+
+            
+            //cout << url << endl;
+            
+            visited.insert(url);
+            bfs_in.push(url);
             cv_in.notify_one();
-            if (!ready) {
-                finish = true;
-                break;
-            }
         }
-
+      end:
         return vector<string>(visited.begin(), visited.end());
     }
 };
