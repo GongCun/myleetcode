@@ -29,7 +29,7 @@ class Solution {
     mutable bool finish = false;
 
   public:
-    void threadFunc(HtmlParser htmlParser) {
+    void threadFunc(HtmlParser& htmlParser) {
 
         while (true) {
             unique_lock<mutex> l(mtx);
@@ -64,7 +64,7 @@ class Solution {
         ready = 0;
 
         for (int i = 0; i < 10; i++) {
-            thread t(&Solution::threadFunc, this, htmlParser);
+            thread t(&Solution::threadFunc, this,ref(htmlParser));
             t.detach();
         }
 
