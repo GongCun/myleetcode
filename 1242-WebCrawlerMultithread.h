@@ -25,9 +25,10 @@ class Solution {
     condition_variable cv_in, cv_out;
     mutable int ready = 0;
     mutable bool finish = false;
+    queue<string> bfs_in, bfs_out;
 
   public:
-    void threadFunc(HtmlParser& htmlParser, queue<string>& bfs_in, queue<string>& bfs_out) {
+    void threadFunc(HtmlParser& htmlParser) {
 
         while (true) {
             unique_lock<mutex> l(mtx);
@@ -56,14 +57,12 @@ class Solution {
     }
 
     vector<string> crawl(string startUrl, HtmlParser htmlParser) {
-        queue<string> bfs_in;
-        queue<string> bfs_out;
         key = getHostname(startUrl);
         bfs_out.push(startUrl);
         ready = 0;
 
-        for (int i = 0; i < 10; i++) {
-            thread t(&Solution::threadFunc, this,ref(htmlParser), ref(bfs_in), ref(bfs_out));
+        for (int i = 0; i < 2; i++) {
+            thread t(&Solution::threadFunc, this,ref(htmlParser));
             t.detach();
         }
 
@@ -87,7 +86,7 @@ class Solution {
                 bfs_in.push(url);
                 ++ready;
             }
-            cv_in.notify_one();
+            cv_in.notify_all();
             if (!ready) {
                 finish = true;
                 break;
