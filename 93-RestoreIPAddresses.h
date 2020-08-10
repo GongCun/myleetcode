@@ -24,7 +24,7 @@ class Solution {
         for (vector<char>::iterator p = v.begin(); p != v.end(); p++) {
             string header = string(v.begin(), p+1);
 
-            if (stoi(header) < 0 || stoi(header )> 255)
+            if (stoi(header) < 0 || stoi(header) > 255 || to_string(stoi(header)) != header)
                 break;
 
             temp.push_back(header);
