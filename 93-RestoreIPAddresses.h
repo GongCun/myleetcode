@@ -13,7 +13,7 @@ class Solution {
 
                     s += (it == temp.begin() ? "" : ".") + *it;
                 }
-                ans.push_back(s);
+                ans.push_back(move(s));
                 return true;
             }
 
