@@ -19,32 +19,33 @@ class Solution {
 
   public:
     void solve(vector<vector<char>>& board) {
+        if (board.empty()) return;
+        
         for (auto i = 0; i < board.size(); ++i)
             unfill.push_back(vector<bool>(board[0].size(), false));
         
-        cout << "1" << endl;
         for (auto i = 0; i < board.size(); ++i) {
             if (board[i][0] == 'O' && unfill[i][0] == false)
                 findUnfill(board, i, 0);
         }
-        cout << "2" << endl;
+
         for (auto i = 0; i < board[0].size(); ++i) {
             if (board[0][i] == 'O' && unfill[0][i] == false)
                 findUnfill(board, 0, i);
         }
-        cout << "3" << endl;
+
         for (auto i = 0; i < board.size(); ++i) {
             if (board[i][board[0].size() - 1] == 'O' &&
                 unfill[i][board[0].size() - 1] == false)
                 findUnfill(board, i, board[0].size() - 1);
         }
-        cout << "4" << endl;
+
         for (auto i = 0; i < board[0].size(); ++i) {
             if (board[board.size() - 1][i] == 'O' &&
                 unfill[board.size() - 1][i] == false)
-                findUnfill(board, board[0].size() - 1, i);
+                findUnfill(board, board.size() - 1, i);
         }
-        cout << "5" << endl;
+
         for (auto i = 0; i < board.size(); i++) {
             for (auto j = 0; j < board[0].size(); j++) {
                 if (!unfill[i][j])
