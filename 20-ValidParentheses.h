@@ -12,6 +12,7 @@ class Solution {
     }
 
     bool isValid(string s) {
+        if (!s.empty() && s.length() % 2 == 1) return false;
         stack<char> left;
 
         for (char c: s) {
